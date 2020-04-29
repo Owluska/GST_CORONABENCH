@@ -1,0 +1,5 @@
+gst_pid.c:12:13:PID_init	8	static
+gst_pid.c:31:6:integral_part	8	static
+gst_pid.c:37:6:differential_part	8	static
+gst_pid.c:44:6:proportional_part	8	static
+gst_pid.c:50:6:PID	16	static

@@ -1,0 +1,7 @@
+target: 20 ms period witth pwm 1-2ms
+        50 Hz
+
+APB1-32 MHz
+counter prescaler 32k
+counter period 20
+
