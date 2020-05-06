@@ -65,11 +65,11 @@ extern "C" {
 #define RAD_TO_DEG 180/3.141593
 
 //acordingly to servo MIN and MAX angles
-#define IMU_MAX_ANGLE -75.0
-#define IMU_MIN_ANGLE -30.0
+#define IMU_MAX_ANGLE SERVO_MAX_ANGLE
+#define IMU_MIN_ANGLE SERVO_MIN_ANGLE
 //f = kb+a
-#define ITS_B -1.0
-#define ITS_A  30.0
+#define ITS_B 1.0
+#define ITS_A 0.0
 
 #define ONE_US 1
 //how much CCRx in one degree

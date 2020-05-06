@@ -104,7 +104,7 @@ float CCRxTD_b=ONE_DEG;
 float Kp = 1.68;
 float Ki = 0.04;
 float Kd = 0.03;
-float pid_hold = 0;
+float pid_hold = 0.0;
 
 //float _DTR_b = 0.029;
 //float _DTR_a =-0.097;
@@ -117,7 +117,7 @@ char uart_string[100] ="";
 //t in us
 //int t = 0;
 //dt in us
-int dt = 1000;
+//int dt = 1000;
 float imu_angle=0;
 float angle_gyro_x, angle_gyro_y, angle_gyro_z = 0;
 
@@ -125,7 +125,7 @@ float angle_gyro_x, angle_gyro_y, angle_gyro_z = 0;
 PIDtypedef gst_pid;
 uint32_t startTick;
 uint32_t new_tick;
-uint32_t tick;
+uint32_t tick, dt;
 
 
 float temp[50], accx[50], accy[50]={0};
@@ -136,6 +136,7 @@ float a = 0;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
+uint32_t get_microseconds_since_begin(uint32_t startTick);
 /*SERVO*/
 int servo_set_position(float degree);
 void servo_set_CCRx_value(uint16_t CCRx_value);
@@ -162,7 +163,7 @@ void clear_uart_buffer(uint8_t counter, uint8_t len, uint8_t buffer[len]);
 //float IMU_get_acc(int axis);
 //float IMU_get_gyro(int axis);
 //float IMU_get_temp();
-float angle_from_acc(int axis);
+//float angle_from_acc(int axis);
 
 /* USER CODE END PFP */
 
@@ -213,7 +214,7 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim1);
   __HAL_UART_ENABLE_IT(&huart1, UART_IT_RXNE);
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&ADC1_DATA, 1);
-//  test_bench_calibration();
+  potentiometer_calibration();
 //  servo_calibration();
   HAL_UART_Transmit(&huart1, hello_string, strlen(hello_string), 10);
   servo_set_position(SERVO_MIN_ANGLE);
@@ -245,14 +246,21 @@ int main(void)
     /* USER CODE BEGIN 3 */
 
 
-     HAL_Delay(1);
-     CFK=0.85;
-	 for(int i = 0; i<(sizeof(temp)/sizeof(int)); i++ )
-	 {
-		temp[i]=complementary_filter(1000, Z_AXIS, &angle_gyro_z, &CFK);
-		accy[i] = angle_from_gyro(Z_AXIS, 1000, &angle_gyro_z);
-//		accx[i] = IMU_get_gyro(Z_AXIS);
-	 }
+//     HAL_Delay(2);
+//     CFK=0.85;
+//     dt=1000;
+//
+//	 for(int i = 0; i<(sizeof(temp)/sizeof(int)); i++ )
+//	 {
+//		temp[i]=complementary_filter(1000, Z_AXIS, &angle_gyro_z, &CFK);
+//		tick=get_microseconds_since_begin(startTick);
+//		if(tick%dt != 0)
+//		{
+//			 continue;
+//		}
+//		accy[i] = angle_from_gyro(Z_AXIS, dt, &angle_gyro_z);
+////		accx[i] = IMU_get_gyro(Z_AXIS);
+//	 }
 
 
 	  if(strcmp(uart_string, "fil_test:start\r") == 0)
@@ -789,7 +797,7 @@ float complementary_filter(float dt, int axis, float* angle_gyro, float* CFK)
 	*angle_gyro = angle_from_gyro(axis, dt, angle_gyro);
 
     angle= (*angle_gyro)*(1-k)+angle_acc*k;
-    HAL_Delay(1);
+//    HAL_Delay(1);
 	return angle;
 }
 
@@ -801,8 +809,8 @@ float stabilize_v1(float hold_angle, float prev_angle, float precision, int time
 	  {
 		  return prev_angle;
 	  }
-	  imu_angle = complementary_filter(time_step, Y_AXIS,
-			                        &angle_gyro_y, &CFK);
+	  imu_angle = complementary_filter(time_step, Z_AXIS,
+			                        &angle_gyro_z, &CFK);
 
 	  if(imu_angle < IMU_MAX_ANGLE)
 	  {
@@ -836,15 +844,15 @@ float stabilize_by_pid(PIDtypedef *PID_struct, int time_step, int timer)
 	  {
 		  return PID_struct->out;
 	  }
-	  imu_angle = complementary_filter(time_step, Y_AXIS,
-			                        &angle_gyro_y, &CFK);
+	  imu_angle = complementary_filter(time_step, Z_AXIS,
+			                        &angle_gyro_z, &CFK);
 
-	  if(imu_angle < IMU_MAX_ANGLE)
+	  if(imu_angle > IMU_MAX_ANGLE)
 	  {
 		  imu_angle = IMU_MAX_ANGLE;
 	  }
 
-	  if(imu_angle > IMU_MIN_ANGLE)
+	  if(imu_angle < IMU_MIN_ANGLE)
 	  {
 		  imu_angle = IMU_MIN_ANGLE;
 	  }
@@ -860,7 +868,7 @@ float stabilize_by_pid(PIDtypedef *PID_struct, int time_step, int timer)
 //	  {
 //		  set = PID_struct->out;
 //	  }
-	  set = SERVO_MAX_ANGLE-PID_struct->out;
+	  set = PID_struct->out;
 //	  set = PID_struct->out;
 	  servo_set_position(set);
 
@@ -903,6 +911,13 @@ void servo_calibration_evaluate()
 	}
 }
 
+uint32_t get_microseconds_since_begin(uint32_t startTick)
+{
+	  //new_tick = DWT->CYCCNT;
+	  uint32_t tick= DWT->CYCCNT - startTick;
+	  tick=tick/SystemCoreClock*1000;
+	  return tick;
+}
 /* USER CODE END 4 */
 
 /**
