@@ -88,12 +88,15 @@ float ay[100]={0.0};
 float az[100]={0.0};
 
 
-float CFK = 0.95;
+float CFK = 0.75;
 
 //float DTR_b,DTR_a=0.0;
 //y=b*x+a
-float RTD_b=34.874;
-float RTD_a=34.131;
+float RTD_b=71.831;
+float RTD_a=-109.200;
+
+//float RTD_b=34.874;
+//float RTD_a=34.131;
 
 float CCRxTD_a=1500;
 float CCRxTD_b=ONE_DEG;
@@ -101,9 +104,13 @@ float CCRxTD_b=ONE_DEG;
 //float RTD_b=34.874;
 //float RTD_a=34.131;
 
-float Kp = 1.68;
-float Ki = 0.04;
-float Kd = 0.03;
+float Kp = 0.86;
+float Ki = 0.10;
+float Kd = 0.95;
+
+//float Kp = 1.68;
+//float Ki = 0.04;
+//float Kd = 0.03;
 float pid_hold = 0.0;
 
 //float _DTR_b = 0.029;
@@ -214,7 +221,7 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim1);
   __HAL_UART_ENABLE_IT(&huart1, UART_IT_RXNE);
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&ADC1_DATA, 1);
-  potentiometer_calibration();
+//  potentiometer_calibration();
 //  servo_calibration();
   HAL_UART_Transmit(&huart1, hello_string, strlen(hello_string), 10);
   servo_set_position(SERVO_MIN_ANGLE);
@@ -321,9 +328,10 @@ int main(void)
 	  if(strcmp(uart_string, "tracking:start\r") == 0)
 	  {
 		  //a = stabilize_v1(SERVO_MIN_ANGLE, 0.5, 0.1, a);
-		  new_tick = DWT->CYCCNT;
-		  tick=new_tick - startTick;
-		  tick=tick/SystemCoreClock*1000;
+//		  new_tick = DWT->CYCCNT;
+//		  tick=new_tick - startTick;
+//		  tick=tick/SystemCoreClock*1000;
+		  tick=get_microseconds_since_begin(startTick);
 		  a = stabilize_by_pid(&gst_pid, ONE_US*1000, tick);
 		  UART_send_float(a);
 
@@ -333,6 +341,11 @@ int main(void)
 	  {
 		  strcpy(uart_string, "");
 	  }
+
+//	  if(strcmp(uart_string, "set:PID\r") == 0)
+//	  {
+//		  strcpy(uart_string, "");
+//	  }
 
 
 	  if(uart_buffer[uart_rx_counter-1] == '\r')
@@ -858,7 +871,8 @@ float stabilize_by_pid(PIDtypedef *PID_struct, int time_step, int timer)
 	  }
 
 	  imu_angle = imu_angle*ITS_B + ITS_A;
-	  pid_error = fabs(PID_struct->hold - imu_angle);
+//	  pid_error = fabs(PID_struct->hold - imu_angle);
+	  pid_error = PID_struct->hold - imu_angle;
 	  PID(PID_struct, pid_error);
 //	  if(PID_struct->out < SERVO_MIN_ANGLE)
 //	  {
@@ -871,8 +885,9 @@ float stabilize_by_pid(PIDtypedef *PID_struct, int time_step, int timer)
 	  set = PID_struct->out;
 //	  set = PID_struct->out;
 	  servo_set_position(set);
-
-	  return _WMA_angle(10);
+	  return set;
+	  //return _WMA_angle(50);
+	  //return get_actual_angle();
 }
 
 void servo_calibration()

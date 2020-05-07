@@ -37,8 +37,9 @@ void integral_part(PIDtypedef *PID, float PID_e)
 void differential_part(PIDtypedef *PID, float PID_e)
 {
 
+	//PID->e=PID_e;
+	PID->D = PID->Kd * (PID->e - PID_e);
 	PID->e=PID_e;
-	PID->D = PID->Kd * PID->e - PID->D;
 }
 
 void proportional_part(PIDtypedef *PID, float PID_e)
