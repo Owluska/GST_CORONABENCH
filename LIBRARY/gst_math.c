@@ -258,17 +258,6 @@ float clamp(float value, float min, float max)
 }
 
 
-float SMA_gyro(int steps, int dt, int axis, float* prev_angle)
-{
-	volatile float temp = *prev_angle;
-	for(int i=0; i<steps; i++)
-	{
-		temp =temp + angle_from_gyro(axis, dt, prev_angle);
-		HAL_Delay(dt);
-	}
-	temp = temp/steps;
-	return temp;
-}
 
 float SMA_acc(int steps, int axis)
 {

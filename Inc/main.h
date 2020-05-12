@@ -37,55 +37,53 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-
+typedef struct
+{
+	uint32_t start_tick;
+	int last_time;
+	int time;
+//	uint32_t us_dt;
+	float ax;
+	float ay;
+	float az;
+}ANG_GYROtypedef;
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
 /* USER CODE BEGIN EC */
-//this values are related to PWM settings and properties
-//#define SERVO_K 24.1667
-//#define SERVO_B -566.6667
 
-
-
-// these values are not related to calibration
-// the user must get them from the boundaries
-// within which the movement should be carried out
-//#define SERVO_MAX_ANGLE 105
-//#define SERVO_MIN_ANGLE 70
-
-#define SERVO_MAX_ANGLE 40
-#define SERVO_MIN_ANGLE -40
 
 #define ADC1_K (3.0/4096.0)
-
+/*One bit of gyro ADC at +/- 250s*/
 #define MPU_GK 131
+/*One bit of acc ADC at +/- 2g*/
 #define MPU_AK 16384
-
+/* Radian to degree constant*/
 #define RAD_TO_DEG 180/3.141593
-
-//acordingly to servo MIN and MAX angles
+/* time constant for complimentary filter */
+#define ONE_US 1
+/* Coefficient between CCRx value and servo degrees */
+#define ONE_DEG 11.11111111
+/*CCRx value of servo on zero degree*/
+#define CCRx_ZERO_DEG 1500
+/* Angle limits for servo */
+#define SERVO_MAX_ANGLE 40
+#define SERVO_MIN_ANGLE -40
+/* Angle limits for IMU */
 #define IMU_MAX_ANGLE SERVO_MAX_ANGLE
 #define IMU_MIN_ANGLE SERVO_MIN_ANGLE
-//f = kb+a
+/**
+ * @brief Coefficients for f(x) = x*b+a approximation
+ * here x - imu angle, f(x) - servo angle
+ */
 #define ITS_B 1.0
 #define ITS_A 0.0
 
-#define ONE_US 1
-//how much CCRx in one degree
-//max servo angle PWM period (4000),
-//min servo angle PWM period (2000)
-#define ONE_DEG 11.11111111
-#define CCRx_ZERO_DEG 1500
-
-
-
-//#define POT_K 0.019
-//#define POT_B -1.274
 /* USER CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
+/* Safe zone of servo movement */
 #define ANGLE_RANGE (SERVO_MAX_ANGLE-SERVO_MIN_ANGLE)
 /* USER CODE END EM */
 
@@ -93,12 +91,50 @@ extern "C" {
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
+
+/**
+ * @brief  Returns potentiometer value in degrees
+ *         based on RTD_b and RTD_a values
+ * @retval Angle value:
+ */
 float get_actual_angle();
+/**
+ * @brief  Gets accelerometer value on one axis
+ * @param  axis: axis
+ * @retval acc value in g
+ */
 float IMU_get_acc(int axis);
+/**
+ * @brief  Gets gyroscope value on one axis
+ * @param  axis: axis
+ * @retval acc value in rad/s
+ */
 float IMU_get_gyro(int axis);
+/**
+ * @brief  Gets IMU temperature value
+ * @retval temperature value in degrees
+ */
 float IMU_get_temp();
+/**
+ * @brief  Calculates angle on one axis(x, y or z)
+ * based on ACC data.
+ * Angle is calculated from the projection
+ * of acceleration data (in g) on the Z axis
+ * @param  axis: axis
+ * @retval angle value in degrees
+ */
 float angle_from_acc(int axis);
-float angle_from_gyro(int axis, float dt_us, float* previous_angle);
+/**
+ * @brief  Calculates angle on one axis(x, y or z)
+ * based on gyro data.
+ * Angle is calculated with this equation:
+ * a=a(t=0)+integral[gyro_data*dt]
+ * from Euler method: a = prev_a+a*dt
+ * @param  axis: axis
+ * @retval angle value in degrees
+ */
+float angle_from_gyro(int axis, ANG_GYROtypedef* g_struct);
+ANG_GYROtypedef* GYRO_struct_init(ANG_GYROtypedef* gyro_data);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/

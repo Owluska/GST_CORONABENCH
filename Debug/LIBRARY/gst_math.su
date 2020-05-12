@@ -13,5 +13,4 @@ gst_math.c:183:6:EMA_angle	24	static
 gst_math.c:199:7:_fabs	16	static
 gst_math.c:205:5:get_sign	8	static
 gst_math.c:224:7:clamp	24	static
-gst_math.c:261:7:SMA_gyro	32	static
-gst_math.c:273:7:SMA_acc	24	static
+gst_math.c:262:7:SMA_acc	24	static

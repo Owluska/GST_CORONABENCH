@@ -36,6 +36,7 @@
 #include "sd_hal_mpu6050.h"
 #include "gst_pid.h"
 #include "dwt_delay.h"
+#include "USB_comunication.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -45,9 +46,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define X_AXIS 1
-#define Y_AXIS 2
-#define Z_AXIS 3
+#define X_AXIS 1    /*! Axis x for spatial data */
+#define Y_AXIS 2    /*! Axis y for spatial data */
+#define Z_AXIS 3    /*! Axis z for spatial data */
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -58,9 +59,9 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-SD_MPU6050 mpu1;
-SD_MPU6050_Result result;
-float mpu_temperature;
+SD_MPU6050 mpu1;                /*! MPU6050 data structure */
+SD_MPU6050_Result result;       /*! MPU6050 communication result */
+float mpu_temperature;          /*! MPU6050 temperature */
 int16_t g_x, g_y, g_z;
 int16_t a_x, a_y, a_z;
 
@@ -69,15 +70,6 @@ uint8_t uart_rx_counter = 0;
 uint8_t uart_rx_data = 0;
 
 uint16_t ADC1_DATA[1] = {0};
-//variables for calibration
-//number 2 in array size means precision: step = 0.5 deg
-//float just_angles[ANGLE_RANGE*2]={0.0};
-//float sma_angles[ANGLE_RANGE*2]={0.0};
-//float wma_angles[ANGLE_RANGE*2]={0.0};
-//float _wma_angles[ANGLE_RANGE*2]={0.0};
-//float nsf_angles[ANGLE_RANGE*2]={0.0};
-//float ema_angles[ANGLE_RANGE*2]={0.0};
-//float last_angles[ANGLE_RANGE*2]={0.0};
 
 float gx[100]={0.0};
 float gy[100]={0.0};
@@ -105,8 +97,10 @@ float CCRxTD_b=ONE_DEG;
 //float RTD_a=34.131;
 
 float Kp = 0.86;
-float Ki = 0.10;
-float Kd = 0.95;
+float Ki = 0.0;
+float Kd = 0.0;
+//float Ki = 0.10;
+//float Kd = 0.95;
 
 //float Kp = 1.68;
 //float Ki = 0.04;
@@ -121,10 +115,6 @@ float pid_hold = 0.0;
 
 char* hello_string = "Head program greets you\r\n";
 char uart_string[100] ="";
-//t in us
-//int t = 0;
-//dt in us
-//int dt = 1000;
 float imu_angle=0;
 float angle_gyro_x, angle_gyro_y, angle_gyro_z = 0;
 
@@ -132,18 +122,18 @@ float angle_gyro_x, angle_gyro_y, angle_gyro_z = 0;
 PIDtypedef gst_pid;
 uint32_t startTick;
 uint32_t new_tick;
-uint32_t tick, dt;
+uint32_t tick, last_tick, dt;
 
+ANG_GYROtypedef gyro_angles;
 
 float temp[50], accx[50], accy[50]={0};
-//float accx[50]={0};
 float a = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-uint32_t get_microseconds_since_begin(uint32_t startTick);
+int get_microseconds_since_begin(uint32_t startTick);
 /*SERVO*/
 int servo_set_position(float degree);
 void servo_set_CCRx_value(uint16_t CCRx_value);
@@ -151,26 +141,20 @@ void servo_set_CCRx_value(uint16_t CCRx_value);
 void potentiometer_calibration();
 void servo_calibration();
 void measure();
-float stabilize_v1(float hold_angle, float prev_angle,
-		   float precision, int time_step, int timer);
-float stabilize_by_pid(PIDtypedef *PID_struct, int time_step, int timer);
-//void get_r_a_function(int len, double angles[len], double resistances[len]);
-//float get_actual_angle();
+float stabilize_v1(float hold_angle, float prev_angle, float precision,
+		                             uint32_t time_step, uint32_t timer);
+float stabilize_by_pid(PIDtypedef *PID_struct,
+		               uint32_t time_step, uint32_t timer);
 float set_angle(float angle, float accuracy);
-float complementary_filter(float dt, int axis,
-		         float* angle_gyro, float* CFK);
+//float complementary_filter(uint32_t current_tick, uint32_t *last_tick,
+//		                   int axis, float* angle_gyro, float* CFK);
+float complementary_filter(int axis, float* CFK,
+		              ANG_GYROtypedef* g_struct);
 /*Potentiometer*/
 float get_resistance();
 float average_ADC(int steps);
 /*UART*/
-void send_series_(int len, float array[len]);
-void UART_send_float(float number);
-void clear_uart_buffer(uint8_t counter, uint8_t len, uint8_t buffer[len]);
-/*IMU*/
-//float IMU_get_acc(int axis);
-//float IMU_get_gyro(int axis);
-//float IMU_get_temp();
-//float angle_from_acc(int axis);
+
 
 /* USER CODE END PFP */
 
@@ -232,15 +216,19 @@ int main(void)
 		                          SD_MPU6050_DataRate_8KHz);
   HAL_Delay(500);
 
-  angle_gyro_x = angle_from_acc(X_AXIS);
-  angle_gyro_y = angle_from_acc(Y_AXIS);
-  angle_gyro_z = angle_from_acc(Z_AXIS);
+//  angle_gyro_x = angle_from_acc(X_AXIS);
+//  angle_gyro_y = angle_from_acc(Y_AXIS);
+//  angle_gyro_z = angle_from_acc(Z_AXIS);
+  gyro_angles=*GYRO_struct_init(&gyro_angles);
+
 
 //  set_angle(pid_hold, 0.5);
   servo_set_position(pid_hold);
   a =pid_hold;
+  last_tick=0;
   startTick = DWT->CYCCNT;
   gst_pid = *PID_init(&gst_pid, &Kp, &Ki, &Kd, &pid_hold);
+
 
   /* USER CODE END 2 */
 
@@ -252,56 +240,18 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-
-//     HAL_Delay(2);
-//     CFK=0.85;
-//     dt=1000;
-//
-//	 for(int i = 0; i<(sizeof(temp)/sizeof(int)); i++ )
-//	 {
-//		temp[i]=complementary_filter(1000, Z_AXIS, &angle_gyro_z, &CFK);
-//		tick=get_microseconds_since_begin(startTick);
-//		if(tick%dt != 0)
-//		{
-//			 continue;
-//		}
-//		accy[i] = angle_from_gyro(Z_AXIS, dt, &angle_gyro_z);
-////		accx[i] = IMU_get_gyro(Z_AXIS);
-//	 }
+	//  HAL_Delay(1);
 
 
-	  if(strcmp(uart_string, "fil_test:start\r") == 0)
+
+	  if(strcmp(uart_string, "gyro:z\r") == 0)
 	  {
 		  strcpy(uart_string, "");
-
-		  double stp = 0.5;
-		  for(double d = SERVO_MIN_ANGLE; d<=SERVO_MAX_ANGLE; d=d+stp)
-		  {
-			  servo_set_position(d);
-			  UART_send_float(get_actual_angle());
-		  }
-	  }
-
-	  if(strcmp(uart_string, "set_angle:debug\r") == 0)
-	  {
-		  strcpy(uart_string, "");
-
-//		  int i = 0;
-		  UART_Transmit_string_CR_LF(&huart1, "started testing setting angle", 10);
-//		  for(double d = SERVO_MIN_ANGLE; d<=SERVO_MAX_ANGLE; d=d+0.5)
-//		  {
-//			  just_angles[i] = set_angle(d);
-//			  UART_send_float(just_angles[i]);
-//			  i++;
-//		  }
-
-//		  for(double d = SERVO_MAX_ANGLE; d>=SERVO_MIN_ANGLE; d=d-0.5)
-//		  {
-//			  just_angles[i] = set_angle(d);
-//			  UART_send_float(just_angles[i]);
-//			  i++;
-//		  }
-		  UART_Transmit_string_CR_LF(&huart1, "stopped testing setting angle", 10);
+//		  UART_send_float(gyro_angles.time);
+	//	  UART_send_float(gyro_angles.start_tick);
+		  UART_Transmit_string_CR_LF(&huart1,"gx:",10);
+		  UART_send_float(angle_from_gyro(Z_AXIS, &gyro_angles));
+//		  UART_send_float(gyro_angles.last_time);
 	  }
 
 	  if(strcmp(uart_string, "calibr:start\r") == 0)
@@ -327,26 +277,15 @@ int main(void)
 
 	  if(strcmp(uart_string, "tracking:start\r") == 0)
 	  {
-		  //a = stabilize_v1(SERVO_MIN_ANGLE, 0.5, 0.1, a);
-//		  new_tick = DWT->CYCCNT;
-//		  tick=new_tick - startTick;
-//		  tick=tick/SystemCoreClock*1000;
 		  tick=get_microseconds_since_begin(startTick);
 		  a = stabilize_by_pid(&gst_pid, ONE_US*1000, tick);
 		  UART_send_float(a);
-
 	  }
 
 	  if(strcmp(uart_string, "tracking:stop\r") == 0)
 	  {
 		  strcpy(uart_string, "");
 	  }
-
-//	  if(strcmp(uart_string, "set:PID\r") == 0)
-//	  {
-//		  strcpy(uart_string, "");
-//	  }
-
 
 	  if(uart_buffer[uart_rx_counter-1] == '\r')
 	  {
@@ -430,30 +369,6 @@ int servo_set_position(volatile float degree)
 
 }
 
-void clear_uart_buffer(uint8_t counter, uint8_t len, uint8_t buffer[len]){
-	for(uint8_t i=0; i<len; i++){
-		buffer[i]='\0';
-	}
-}
-
-//void get_r_a_function(int len, double angles[len], double resistances[len])
-//{
-//
-//	for(int d = 0; d<len; d++)
-//	  {
-//		int a = servo_set_position(angles[d]);
-//		  if(a != -1)
-//		  {
-//			  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&ADC1_DATA, 1);
-//			  resistances[d]= (ADC1_DATA[0]*ADC1_K);
-//
-//			  HAL_Delay(10);
-//		  }
-//          HAL_Delay(1);
-//	  }
-//}
-
-
 void potentiometer_calibration()
 {
 	int len=ANGLE_RANGE*2;
@@ -482,7 +397,6 @@ void potentiometer_calibration()
          HAL_Delay(1);
 	}
 
-//	linear_regression(len,degs, ress, &DTR_a, &DTR_b);
 
 	linear_regression(len, ress, degs, &RTD_a, &RTD_b);
     HAL_Delay(10);
@@ -568,118 +482,6 @@ float set_angle(float angle, float accuracy)
 	return current_angle;
 }
 
-//void void measure()
-//{
-//	  int i = 0;
-//	  int mcount = 50;
-//	  double stp = 0.5;
-//	  char* inform = "Started filter test.\r\nmcount = 10";
-//	  UART_Transmit_string_CR_LF(&huart1, inform, 10);
-//	  for(double d = SERVO_MIN_ANGLE; d<=SERVO_MAX_ANGLE; d=d+stp)
-//	  {
-//		  servo_set_position(d);
-//
-//		  just_angles[i] = get_actual_angle();
-//		  sma_angles[i] = SMA_angle(mcount);
-//		  _wma_angles[i] =_WMA_angle(mcount);
-//		  last_angles[i] = last_ited_angle(mcount);
-//
-//		  i++;
-//	  }
-//	  inform = "Ended filter test.\r\ngot = 4 arrays";
-//	  UART_Transmit_string_CR_LF(&huart1, inform, 10);
-//
-////	  send_series_(ANGLE_RANGE*2, "sma_angles", sma_angles);
-////	  send_series_(ANGLE_RANGE*2, "_wma_angles", _wma_angles);
-////	  send_series_(ANGLE_RANGE*2, "last_angles", last_angles);
-//}
-
-void UART_Transmit_number_CR_LF(UART_HandleTypeDef *huart, uint8_t *pData, uint16_t Size, uint32_t Timeout)
-{
-	uint8_t end_code  = 13; //ASCII '\r'
-	uint8_t enter_code  = 10; //ASCII '\r'
-
-	HAL_UART_Transmit(huart, pData, Size, Timeout);
-	HAL_Delay(10);
-	HAL_UART_Transmit(huart, &enter_code, 1, Timeout);
-	HAL_Delay(10);
-	HAL_UART_Transmit(huart, &end_code, 1, Timeout);
-	HAL_Delay(10);
-}
-
-void UART_Transmit_string_CR_LF(UART_HandleTypeDef *huart, char *pData, uint32_t Timeout)
-{
-	uint8_t end_code  = 13; //ASCII '\r'
-	uint8_t enter_code  = 10; //ASCII '\r'
-
-	HAL_UART_Transmit(huart, pData, strlen(pData), Timeout);
-	HAL_Delay(10);
-	HAL_UART_Transmit(huart, &end_code, 1, Timeout);
-	HAL_Delay(10);
-	HAL_UART_Transmit(huart, &enter_code, 1, Timeout);
-	HAL_Delay(10);
-
-}
-
-void UART_send_float(float number)
-{
-	char* point = ".";
-	char temp[100] = "";
-	volatile int n = 0;
-
-    volatile float reminder, quotient = 0.0;
-
-	quotient = (int)(number);
-	n = quotient;
-
-	itoa(n, temp, 10);
-	HAL_UART_Transmit(&huart1, temp, strlen(temp), 10);
-	HAL_Delay(10);
-
-	HAL_UART_Transmit(&huart1, point, 1, 10);
-	HAL_Delay(10);
-
-	reminder = fabs(number - quotient);
-	reminder = (int)(reminder*1000);
-	n = reminder;
-	itoa(n, temp, 10);
-
-	UART_Transmit_string_CR_LF(&huart1, temp, 10);
-}
-
-void send_series_(int len, float array[len])
-{
-
-	char* point = ".";
-	char temp[100] = "";
-	volatile int n = 0;
-
-    volatile float reminder, quotient = 0.0;
-    UART_Transmit_string_CR_LF(&huart1, "start", 10);
-
-	for(int i = 0; i < len; i++)
-	{
-
-		quotient = (int)(array[i]);
-        n = quotient;
-
-        itoa(n, temp, 10);
-		HAL_UART_Transmit(&huart1, temp, strlen(temp), 10);
-		HAL_Delay(10);
-
-  		HAL_UART_Transmit(&huart1, point, 1, 10);
-		HAL_Delay(10);
-
-		reminder = array[i] - quotient;
-	    reminder = (int)(reminder*1000);
-	    n = reminder;
-        itoa(n, temp, 10);
-
-		UART_Transmit_string_CR_LF(&huart1, temp, 10);
-	}
-
-    UART_Transmit_string_CR_LF(&huart1, "stop", 10);
-}
 
 float IMU_get_acc(int axis)
 {
@@ -730,24 +532,6 @@ float IMU_get_temp()
 	  return mpu1.Temperature;
 }
 
-//float anglex_from_acc()
-//{
-//	volatile float acc_y = IMU_get_acc(Y_AXIS);
-//	HAL_Delay(1);
-//	float anglex = 0.0;
-//	acc_y=clamp(acc_y, -1.0, 1.0);
-//	if(acc_y >=0)
-//	{
-//		anglex = 90-RAD_TO_DEG*(float)acos(acc_y);
-//	}
-//
-//	else
-//	{
-//		anglex=RAD_TO_DEG*(float)acos(acc_y) - 90;
-//	}
-//
-//	return anglex;
-//}
 
 float angle_from_acc(int axis)
 {
@@ -791,30 +575,81 @@ float angle_from_acc(int axis)
 	return angle;
 }
 
-float angle_from_gyro(int axis, float dt_us, float* previous_angle)
+//float angle_from_gyro(int axis, int tick, int *last_tick,
+//		                                     float* previous_angle)
+//{
+//	volatile float gyro = IMU_get_gyro(axis);
+//	volatile float dt = (float)((tick - *last_tick)*1e-6);
+//	*previous_angle = *previous_angle + gyro*dt;
+//	*last_tick=get_microseconds_since_begin(startTick);
+//    return *previous_angle;
+//}
+
+float angle_from_gyro(int axis, ANG_GYROtypedef* g_struct)
 {
-	volatile float gyro = IMU_get_gyro(axis);
-	*previous_angle = *previous_angle + gyro*dt*1e-6;
-    return *previous_angle;
+
+
+	g_struct->time=get_microseconds_since_begin(g_struct->start_tick);
+	volatile float dt = (float)((g_struct->time - g_struct->last_time)*1e-6);
+//	DWT_Delay(g_struct->us_dt);
+//	volatile float dt = (float)(g_struct->us_dt)*1e-6;
+	UART_send_float(dt);
+	g_struct->last_time=get_microseconds_since_begin(g_struct->start_tick);
+	if(axis == X_AXIS)
+	{
+		g_struct->ax=g_struct->ax+IMU_get_gyro(axis)*dt;
+		return g_struct->ax;
+	}
+
+	else if(axis == Y_AXIS)
+	{
+		g_struct->ay=g_struct->ay+IMU_get_gyro(axis)*dt;
+		return g_struct->ay;
+	}
+
+	else if(axis == Z_AXIS)
+	{
+		g_struct->az=g_struct->az+IMU_get_gyro(axis)*dt;
+		return g_struct->az;
+	}
+
+
 }
-float complementary_filter(float dt, int axis, float* angle_gyro, float* CFK)
+//float complementary_filter(int current_tick, int *last_tick,
+//		                   int axis, float* angle_gyro, float* CFK)
+//{
+//
+//
+//	volatile float k = *CFK;
+//	volatile float angle_acc = 0;
+//    volatile float angle = 0;
+//
+//	angle_acc = angle_from_acc(axis);
+//	*angle_gyro = angle_from_gyro(axis, current_tick,
+//			                    last_tick,angle_gyro);
+//
+//    angle= (*angle_gyro)*(1-k)+angle_acc*k;
+//	return angle;
+//}
+
+float complementary_filter(int axis, float* CFK,
+		              ANG_GYROtypedef* g_struct)
 {
 
 
 	volatile float k = *CFK;
-	volatile float angle_acc = 0;
+	volatile float angle_acc, angle_gyro = 0;
     volatile float angle = 0;
 
-
 	angle_acc = angle_from_acc(axis);
-	*angle_gyro = angle_from_gyro(axis, dt, angle_gyro);
+	angle_gyro = angle_from_gyro(axis, g_struct);
 
-    angle= (*angle_gyro)*(1-k)+angle_acc*k;
-//    HAL_Delay(1);
+    angle= angle_gyro*(1-k)+angle_acc*k;
 	return angle;
 }
 
-float stabilize_v1(float hold_angle, float prev_angle, float precision, int time_step, int timer)
+float stabilize_v1(float hold_angle, float prev_angle, float precision,
+		                             uint32_t time_step, uint32_t timer)
 {
 	  volatile float da;
 	  volatile float imu_angle;
@@ -822,8 +657,7 @@ float stabilize_v1(float hold_angle, float prev_angle, float precision, int time
 	  {
 		  return prev_angle;
 	  }
-	  imu_angle = complementary_filter(time_step, Z_AXIS,
-			                        &angle_gyro_z, &CFK);
+	  imu_angle = complementary_filter( Z_AXIS, &CFK, &gyro_angles);
 
 	  if(imu_angle < IMU_MAX_ANGLE)
 	  {
@@ -847,18 +681,18 @@ float stabilize_v1(float hold_angle, float prev_angle, float precision, int time
 //	  return set_angle(imu_angle, precision);
 }
 
-float stabilize_by_pid(PIDtypedef *PID_struct, int time_step, int timer)
+float stabilize_by_pid(PIDtypedef *PID_struct,
+		               uint32_t time_step, uint32_t timer)
 {
 	  volatile float pid_error;
 	  volatile float imu_angle;
 	  volatile float set;
- //     HAL_Delay(1);
+
 	  if((timer%time_step)!=0)
 	  {
 		  return PID_struct->out;
 	  }
-	  imu_angle = complementary_filter(time_step, Z_AXIS,
-			                        &angle_gyro_z, &CFK);
+	  imu_angle = complementary_filter(Z_AXIS, &CFK, &gyro_angles);
 
 	  if(imu_angle > IMU_MAX_ANGLE)
 	  {
@@ -874,14 +708,7 @@ float stabilize_by_pid(PIDtypedef *PID_struct, int time_step, int timer)
 //	  pid_error = fabs(PID_struct->hold - imu_angle);
 	  pid_error = PID_struct->hold - imu_angle;
 	  PID(PID_struct, pid_error);
-//	  if(PID_struct->out < SERVO_MIN_ANGLE)
-//	  {
-//		  set = SERVO_MAX_ANGLE-PID_struct->out;
-//	  }
-//	  else
-//	  {
-//		  set = PID_struct->out;
-//	  }
+
 	  set = PID_struct->out;
 //	  set = PID_struct->out;
 	  servo_set_position(set);
@@ -926,12 +753,26 @@ void servo_calibration_evaluate()
 	}
 }
 
-uint32_t get_microseconds_since_begin(uint32_t startTick)
+int get_microseconds_since_begin(uint32_t startTick)
 {
 	  //new_tick = DWT->CYCCNT;
-	  uint32_t tick= DWT->CYCCNT - startTick;
-	  tick=tick/SystemCoreClock*1000;
+	  int tick= (int)DWT->CYCCNT - startTick;
+	  int divider=(int)(SystemCoreClock/1e6);
+	  tick=tick/divider;
 	  return tick;
+}
+
+ANG_GYROtypedef* GYRO_struct_init(ANG_GYROtypedef* gyro_data)
+{
+
+	gyro_data->time = 0;
+	gyro_data->last_time = 0;
+	gyro_data->start_tick=DWT->CYCCNT;
+//	gyro_data->us_dt=delay_us;
+	gyro_data->ax = angle_from_acc(X_AXIS);
+	gyro_data->ay = angle_from_acc(Y_AXIS);
+	gyro_data->az = angle_from_acc(Z_AXIS);
+	return gyro_data;
 }
 /* USER CODE END 4 */
 
