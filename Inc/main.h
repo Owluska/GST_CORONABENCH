@@ -37,12 +37,17 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
+
+/**
+ * @brief  Parameters for angle
+ * from gyroscope calculations
+ */
 typedef struct
 {
 	uint32_t start_tick;
 	int last_time;
 	int time;
-//	uint32_t us_dt;
+
 	float ax;
 	float ay;
 	float az;
@@ -131,10 +136,17 @@ float angle_from_acc(int axis);
  * a=a(t=0)+integral[gyro_data*dt]
  * from Euler method: a = prev_a+a*dt
  * @param  axis: axis
+ * @param  *g_struct: pointer on gyro angle
+ * data structure
  * @retval angle value in degrees
  */
 float angle_from_gyro(int axis, ANG_GYROtypedef* g_struct);
-ANG_GYROtypedef* GYRO_struct_init(ANG_GYROtypedef* gyro_data);
+/**
+ * @brief  Initializes gyro angles data structure
+ * @param  *gyro_data: structure
+ * @retval initialized structure
+ */
+ANG_GYROtypedef* GYRO_struct_init(ANG_GYROtypedef *gyro_data);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/

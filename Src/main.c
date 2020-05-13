@@ -59,53 +59,35 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-SD_MPU6050 mpu1;                /*! MPU6050 data structure */
-SD_MPU6050_Result result;       /*! MPU6050 communication result */
-float mpu_temperature;          /*! MPU6050 temperature */
+/*! MPU6050 data structure */
+SD_MPU6050 mpu1;
+/*! MPU6050 communication result */
+SD_MPU6050_Result result;
+/*! MPU6050 temperature */
+float mpu_temperature;
+/*! Raw gyroscope data */
 int16_t g_x, g_y, g_z;
+/*! Raw accelerometer data */
 int16_t a_x, a_y, a_z;
-
-uint8_t uart_buffer[100]={0};
-uint8_t uart_rx_counter = 0;
-uint8_t uart_rx_data = 0;
-
+/*! potentiometer data */
 uint16_t ADC1_DATA[1] = {0};
-
-float gx[100]={0.0};
-float gy[100]={0.0};
-float gz[100]={0.0};
-
-float ax[100]={0.0};
-float ay[100]={0.0};
-float az[100]={0.0};
-
-
-float CFK = 0.75;
-
-//float DTR_b,DTR_a=0.0;
+/*! linear regression coefficients*/
+/*! deg = b*res+ a, RTD - resistance to degree*/
 //y=b*x+a
 float RTD_b=71.831;
 float RTD_a=-109.200;
 
 //float RTD_b=34.874;
 //float RTD_a=34.131;
-
+/*! linear regression coefficients*/
+/*! CCRx_value = b*deg+ a, CCRxTD - CCRx to degree*/
+/*! CCRx -  capture and compare register of PWM(TIM4)*/
 float CCRxTD_a=1500;
 float CCRxTD_b=ONE_DEG;
 
 //float RTD_b=34.874;
 //float RTD_a=34.131;
 
-float Kp = 0.86;
-float Ki = 0.0;
-float Kd = 0.0;
-//float Ki = 0.10;
-//float Kd = 0.95;
-
-//float Kp = 1.68;
-//float Ki = 0.04;
-//float Kd = 0.03;
-float pid_hold = 0.0;
 
 //float _DTR_b = 0.029;
 //float _DTR_a =-0.097;
@@ -113,46 +95,133 @@ float pid_hold = 0.0;
 //float _RTD_b = 34.874;
 //float _RTD_a = 34.131;
 
-char* hello_string = "Head program greets you\r\n";
-char uart_string[100] ="";
-float imu_angle=0;
+/*! angles from accelerometer*/
 float angle_gyro_x, angle_gyro_y, angle_gyro_z = 0;
-
-
+/*! gyro angles structure variable*/
+ANG_GYROtypedef gyro_angles;
+/*! complementary filter coefficient */
+float CFK = 0.75;
+/*! imu angle variable for saving imu angle data*/
+/*! here is data from complementary filter*/
+float a = 0;
+/*! PID structure variable*/
 PIDtypedef gst_pid;
+/*! P coefficient of PID*/
+float Kp = 0.86;
+/*! I coefficient of PID*/
+float Ki = 0.0;
+/*! D coefficient of PID*/
+float Kd = 0.0;
+//float Ki = 0.10;
+//float Kd = 0.95;
+
+//float Kp = 1.68;
+//float Ki = 0.04;
+//float Kd = 0.03;
+/*! Hold position in degrees for PID*/
+float pid_hold = 0.0;
+
+uint8_t uart_buffer[100]={0};   /*! buffer for uart data */
+uint8_t uart_rx_counter = 0;    /*! counter for uart data */
+
+/*! idn is string which is sent to uart at every program start*/
+char* idn = "Camera gyrostabilization app.\r\nv3.0\r\nDate:13.05.2020\r\nAuthor:Kagirina K.A.";
+/*! uart_string is served for saving commands from uart*/
+char uart_string[100] ="";
+
+/*! debug  data*/
 uint32_t startTick;
 uint32_t new_tick;
 uint32_t tick, last_tick, dt;
-
-ANG_GYROtypedef gyro_angles;
-
-float temp[50], accx[50], accy[50]={0};
-float a = 0;
+//float temp[50], accx[50], accy[50]={0};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
+/**
+ * @brief  Gets microseconds from DWT timer
+ * @param  startTick: time at program start point
+ * @retval time since startTick in microseconds
+ */
 int get_microseconds_since_begin(uint32_t startTick);
+/**
+ * @brief  Gets milliseconds from DWT timer
+ * @param  startTick: time at program start point
+ * @retval time since startTick in milliseconds
+ */
+int get_milliseconds_since_begin(uint32_t startTick);
 /*SERVO*/
-int servo_set_position(float degree);
+/**
+ * @brief  Writes number in CCRx register
+ * @param  CCRx_value: number to write
+ */
 void servo_set_CCRx_value(uint16_t CCRx_value);
+/**
+ * @brief  Turns servo on some degrees.
+ * For this purpose calculates CCRx value
+ * from number degree to turn. Calculations based
+ * on fuction CCRx=a*deg+b
+ * @param  degree: count degrees to turn
+ * @retval if degree in range [SERVO_MIN_ANGLE, SERVO_MAX_ANGLE]
+ * returns calculated CCRx value, else returns -1
+ */
+int servo_set_position(float degree);
 /*test bench*/
+/**
+ * @brief  Calculates coefficients for degree in dependent from resistance.
+ * Gets array of degrees, rotates servo on degrees from array
+ * measures resistances at this degrees and saves their in array of resistances.
+ * Then calculates coefficients from linear regression approximation algorithm.
+ */
 void potentiometer_calibration();
+/**
+ * @brief  Calculates coefficients for CRRx values in dependent from degrees.
+ * Gets array of degrees, calculates CCRx array values from formula:
+ * CCRs[i] = CCRx_ZERO_DEG+deg*ONE_DEG. (Naturally in this case, linear regression
+ * coefficients equals CCRx_ZERO_DEG and ONE_DEG respectively)
+ * Then calculates coefficients from linear regression approximation algorithm.
+ */
 void servo_calibration();
-void measure();
-float stabilize_v1(float hold_angle, float prev_angle, float precision,
-		                             uint32_t time_step, uint32_t timer);
+/**
+ * @brief  Algorithm of servo position hold based on PID regulator
+ * @param  *PID_struct: PID data structure
+ * @param  *time_step: step for gyroscope angle calculations
+ * @param  *timer: current time
+ * @retval returns out = P(err)+I(err)+D(err) in degrees
+ */
 float stabilize_by_pid(PIDtypedef *PID_struct,
 		               uint32_t time_step, uint32_t timer);
+/**
+ * @brief  Sets servo angle based on potentiometer data
+ * with defined accuracy
+ * @param  angle: angle value to set
+ * @param  accuracy: desired accuracy of setting
+ * @retval returns set angle in degrees
+ */
 float set_angle(float angle, float accuracy);
-//float complementary_filter(uint32_t current_tick, uint32_t *last_tick,
-//		                   int axis, float* angle_gyro, float* CFK);
+/**
+ * @brief  Calculates angle of bench based on imu data and
+ * complementary filter: a = (1-k)*ag+k*ac, ag - angle from
+ * gyro and ac - angle from acc in one axis
+ * @param  axis: axis
+ * @param  CFK: k from formula above
+ * @param *g_struct: gyro angle structure
+ * @retval calculated angle from formula above in degrees
+ */
 float complementary_filter(int axis, float* CFK,
-		              ANG_GYROtypedef* g_struct);
+		              ANG_GYROtypedef *g_struct);
 /*Potentiometer*/
+/**
+ * @brief  Calculates resistance from ADC data
+ * @retval resistance value in volts
+ */
 float get_resistance();
-float average_ADC(int steps);
+
+//void measure();
+//float stabilize_v1(float hold_angle, float prev_angle, float precision,
+//		                             uint32_t time_step, uint32_t timer);
+//float average_ADC(int steps);
 /*UART*/
 
 
@@ -207,7 +276,8 @@ int main(void)
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&ADC1_DATA, 1);
 //  potentiometer_calibration();
 //  servo_calibration();
-  HAL_UART_Transmit(&huart1, hello_string, strlen(hello_string), 10);
+//  HAL_UART_Transmit(&huart1, hello_string, strlen(hello_string), 10);
+  UART_Transmit_string(&huart1, idn, 10);
   servo_set_position(SERVO_MIN_ANGLE);
 
   result = SD_MPU6050_Init(&hi2c1,&mpu1,SD_MPU6050_Device_0,
@@ -216,17 +286,13 @@ int main(void)
 		                          SD_MPU6050_DataRate_8KHz);
   HAL_Delay(500);
 
-//  angle_gyro_x = angle_from_acc(X_AXIS);
-//  angle_gyro_y = angle_from_acc(Y_AXIS);
-//  angle_gyro_z = angle_from_acc(Z_AXIS);
+
   gyro_angles=*GYRO_struct_init(&gyro_angles);
 
-
-//  set_angle(pid_hold, 0.5);
   servo_set_position(pid_hold);
   a =pid_hold;
   last_tick=0;
-  startTick = DWT->CYCCNT;
+  //startTick = DWT->CYCCNT;
   gst_pid = *PID_init(&gst_pid, &Kp, &Ki, &Kd, &pid_hold);
 
 
@@ -246,12 +312,20 @@ int main(void)
 
 	  if(strcmp(uart_string, "gyro:z\r") == 0)
 	  {
+
+		  a = angle_from_gyro(Z_AXIS, &gyro_angles);
+		  tick=get_milliseconds_since_begin(gyro_angles.start_tick);
+		  if(tick%500 != 0)
+		  {
+			  continue;
+		  }
+		  UART_Transmit_string(&huart1, "gz:\t", 10);
+		  UART_send_float(&huart1, a, 10);
+	  }
+
+	  if(strcmp(uart_string, "stop_posting:\r") == 0)
+	  {
 		  strcpy(uart_string, "");
-//		  UART_send_float(gyro_angles.time);
-	//	  UART_send_float(gyro_angles.start_tick);
-		  UART_Transmit_string_CR_LF(&huart1,"gx:",10);
-		  UART_send_float(angle_from_gyro(Z_AXIS, &gyro_angles));
-//		  UART_send_float(gyro_angles.last_time);
 	  }
 
 	  if(strcmp(uart_string, "calibr:start\r") == 0)
@@ -263,8 +337,8 @@ int main(void)
 	  if(strcmp(uart_string, "calibr:send_ab\r") == 0)
 	  {
 		  UART_Transmit_string_CR_LF(&huart1, "resistance to degree a and b:", 10);
-		  UART_send_float(RTD_a);
-		  UART_send_float(RTD_b);
+		  UART_send_float(&huart1,RTD_a,10);
+		  UART_send_float(&huart1,RTD_b,10);
 		  strcpy(uart_string, "");
 
 	  }
@@ -279,7 +353,7 @@ int main(void)
 	  {
 		  tick=get_microseconds_since_begin(startTick);
 		  a = stabilize_by_pid(&gst_pid, ONE_US*1000, tick);
-		  UART_send_float(a);
+		  UART_send_float(&huart1, a, 10);
 	  }
 
 	  if(strcmp(uart_string, "tracking:stop\r") == 0)
@@ -575,15 +649,7 @@ float angle_from_acc(int axis)
 	return angle;
 }
 
-//float angle_from_gyro(int axis, int tick, int *last_tick,
-//		                                     float* previous_angle)
-//{
-//	volatile float gyro = IMU_get_gyro(axis);
-//	volatile float dt = (float)((tick - *last_tick)*1e-6);
-//	*previous_angle = *previous_angle + gyro*dt;
-//	*last_tick=get_microseconds_since_begin(startTick);
-//    return *previous_angle;
-//}
+
 
 float angle_from_gyro(int axis, ANG_GYROtypedef* g_struct)
 {
@@ -591,10 +657,10 @@ float angle_from_gyro(int axis, ANG_GYROtypedef* g_struct)
 
 	g_struct->time=get_microseconds_since_begin(g_struct->start_tick);
 	volatile float dt = (float)((g_struct->time - g_struct->last_time)*1e-6);
-//	DWT_Delay(g_struct->us_dt);
-//	volatile float dt = (float)(g_struct->us_dt)*1e-6;
-	UART_send_float(dt);
+
+	dt= fabs(dt);
 	g_struct->last_time=get_microseconds_since_begin(g_struct->start_tick);
+
 	if(axis == X_AXIS)
 	{
 		g_struct->ax=g_struct->ax+IMU_get_gyro(axis)*dt;
@@ -613,24 +679,8 @@ float angle_from_gyro(int axis, ANG_GYROtypedef* g_struct)
 		return g_struct->az;
 	}
 
-
 }
-//float complementary_filter(int current_tick, int *last_tick,
-//		                   int axis, float* angle_gyro, float* CFK)
-//{
-//
-//
-//	volatile float k = *CFK;
-//	volatile float angle_acc = 0;
-//    volatile float angle = 0;
-//
-//	angle_acc = angle_from_acc(axis);
-//	*angle_gyro = angle_from_gyro(axis, current_tick,
-//			                    last_tick,angle_gyro);
-//
-//    angle= (*angle_gyro)*(1-k)+angle_acc*k;
-//	return angle;
-//}
+
 
 float complementary_filter(int axis, float* CFK,
 		              ANG_GYROtypedef* g_struct)
@@ -759,6 +809,15 @@ int get_microseconds_since_begin(uint32_t startTick)
 	  int tick= (int)DWT->CYCCNT - startTick;
 	  int divider=(int)(SystemCoreClock/1e6);
 	  tick=tick/divider;
+	  return tick;
+}
+
+int get_milliseconds_since_begin(uint32_t startTick)
+{
+	  //new_tick = DWT->CYCCNT;
+	  int tick= (int)DWT->CYCCNT - startTick;
+	  int clock=(int)(SystemCoreClock/1e3);
+	  tick=tick/clock;
 	  return tick;
 }
 

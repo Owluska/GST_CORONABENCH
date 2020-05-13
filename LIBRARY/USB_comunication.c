@@ -34,22 +34,40 @@ void UART_Transmit_number_CR_LF(UART_HandleTypeDef *huart,
 	HAL_Delay(10);
 }
 
+void UART_Transmit_string(UART_HandleTypeDef *huart,
+		                    char *pData, uint32_t Timeout)
+{
+	uint8_t data;
+	while(*pData != '\0')
+	{
+
+	    data=(uint8_t)(*pData);
+		HAL_UART_Transmit(huart, &data, 1, Timeout);
+	    pData++;
+	}
+}
+
+
 void UART_Transmit_string_CR_LF(UART_HandleTypeDef *huart,
 		                    char *pData, uint32_t Timeout)
 {
 	uint8_t end_code  = 13; //ASCII '\r'
 	uint8_t enter_code  = 10; //ASCII '\r'
 
-	HAL_UART_Transmit(huart, pData, strlen(pData), Timeout);
-	HAL_Delay(10);
-	HAL_UART_Transmit(huart, &end_code, 1, Timeout);
-	HAL_Delay(10);
-	HAL_UART_Transmit(huart, &enter_code, 1, Timeout);
-	HAL_Delay(10);
+	UART_Transmit_string(huart, pData, Timeout);
+//	HAL_UART_Transmit(huart, pData, strlen(pData), Timeout);
+//	HAL_Delay(10);
+//
+//	HAL_UART_Transmit(huart, &end_code, 1, Timeout);
+//	HAL_Delay(10);
+//	HAL_UART_Transmit(huart, &enter_code, 1, Timeout);
+//	HAL_Delay(10);
+	UART_Transmit_string(huart, &end_code, Timeout);
+	UART_Transmit_string(huart, &enter_code, Timeout);
 
 }
 
-void UART_send_float(float number)
+void UART_send_float(UART_HandleTypeDef *huart, float number, uint32_t Timeout)
 {
 	char* point = ".";
 	char temp[100] = "";
@@ -61,18 +79,21 @@ void UART_send_float(float number)
 	n = quotient;
 
 	itoa(n, temp, 10);
-	HAL_UART_Transmit(&huart1, temp, strlen(temp), 10);
-	HAL_Delay(10);
 
-	HAL_UART_Transmit(&huart1, point, 1, 10);
-	HAL_Delay(10);
+	UART_Transmit_string(huart, temp, Timeout);
+//	HAL_UART_Transmit(huart, temp, strlen(temp), Timeout);
+//	HAL_Delay(10);
+
+//	HAL_UART_Transmit(huart, point, 1, Timeout);
+//	HAL_Delay(10);
+	UART_Transmit_string(huart, point, Timeout);
 
 	reminder = fabs(number - quotient);
 	reminder = (int)(reminder*1000);
 	n = reminder;
 	itoa(n, temp, 10);
 
-	UART_Transmit_string_CR_LF(&huart1, temp, 10);
+	UART_Transmit_string_CR_LF(huart, temp, Timeout);
 }
 
 void send_series_(int len, float array[len])
