@@ -26,8 +26,6 @@ PIDtypedef* PID_init(PIDtypedef* PID, float *KP, float *KI, float *KD, float *ho
 }
 
 
-
-
 void integral_part(PIDtypedef *PID, float PID_e)
 {
 	PID->e=PID_e;

@@ -186,12 +186,9 @@ void servo_calibration();
 /**
  * @brief  Algorithm of servo position hold based on PID regulator
  * @param  *PID_struct: PID data structure
- * @param  *time_step: step for gyroscope angle calculations
- * @param  *timer: current time
  * @retval returns out = P(err)+I(err)+D(err) in degrees
  */
-float stabilize_by_pid(PIDtypedef *PID_struct,
-		               uint32_t time_step, uint32_t timer);
+float stabilize_by_pid(PIDtypedef *PID_struct);
 /**
  * @brief  Sets servo angle based on potentiometer data
  * with defined accuracy
@@ -268,31 +265,38 @@ int main(void)
   MX_ADC1_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
+  /*! Start servo timer*/
   HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_1);
+  /*! Init independent core timer for us time*/
   DWT_Init();
-  HAL_TIM_Base_Start(&htim1);
-  HAL_TIM_Base_Start_IT(&htim1);
+
+//  HAL_TIM_Base_Start(&htim1);
+//  HAL_TIM_Base_Start_IT(&htim1);
+  /*! Enable uart interrupt related to recieve data*/
   __HAL_UART_ENABLE_IT(&huart1, UART_IT_RXNE);
+  /*! Start measuring potentiometer data*/
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&ADC1_DATA, 1);
 //  potentiometer_calibration();
 //  servo_calibration();
-//  HAL_UART_Transmit(&huart1, hello_string, strlen(hello_string), 10);
+  /*! Transmit identification string*/
   UART_Transmit_string(&huart1, idn, 10);
-  servo_set_position(SERVO_MIN_ANGLE);
-
+  /*! Set appropriate servo position*/
+  servo_set_position(pid_hold);
+  /*! Connect and set IMU module*/
   result = SD_MPU6050_Init(&hi2c1,&mpu1,SD_MPU6050_Device_0,
 		   SD_MPU6050_Accelerometer_2G, SD_MPU6050_Gyroscope_250s);
+  /*! Set gyro datarate*/
   result = SD_MPU6050_SetDataRate(&hi2c1,&mpu1,
 		                          SD_MPU6050_DataRate_8KHz);
+  /*! Wait after IMU set*/
   HAL_Delay(500);
 
-
+  /*! Initialization of gyro angles data structure*/
   gyro_angles=*GYRO_struct_init(&gyro_angles);
-
-  servo_set_position(pid_hold);
   a =pid_hold;
-  last_tick=0;
-  //startTick = DWT->CYCCNT;
+// last_tick=0;
+//startTick = DWT->CYCCNT;
+  /*! Initialization of PID data structure*/
   gst_pid = *PID_init(&gst_pid, &Kp, &Ki, &Kd, &pid_hold);
 
 
@@ -310,63 +314,59 @@ int main(void)
 
 
 
-	  if(strcmp(uart_string, "gyro:z\r") == 0)
-	  {
-
-		  a = angle_from_gyro(Z_AXIS, &gyro_angles);
-		  tick=get_milliseconds_since_begin(gyro_angles.start_tick);
-		  if(tick%500 != 0)
-		  {
-			  continue;
-		  }
-		  UART_Transmit_string(&huart1, "gz:\t", 10);
-		  UART_send_float(&huart1, a, 10);
-	  }
-
-	  if(strcmp(uart_string, "stop_posting:\r") == 0)
-	  {
-		  strcpy(uart_string, "");
-	  }
-
+//	  if(strcmp(uart_string, "gyro:z\r") == 0)
+//	  {
+//
+//		  a = angle_from_gyro(Z_AXIS, &gyro_angles);
+//		  tick=get_milliseconds_since_begin(gyro_angles.start_tick);
+//		  if(tick%500 != 0)
+//		  {
+//			  continue;
+//		  }
+//		  UART_Transmit_string(&huart1, "gz:\t", 10);
+//		  UART_send_float(&huart1, a, 10);
+//	  }
+//
+//	  if(strcmp(uart_string, "stop_posting:\r") == 0)
+//	  {
+//		  strcpy(uart_string, "");
+//	  }
+	  /*! Start potentiometer calibration*/
 	  if(strcmp(uart_string, "calibr:start\r") == 0)
 	  {
 		  potentiometer_calibration();
 		  strcpy(uart_string, "");
 	  }
 
-	  if(strcmp(uart_string, "calibr:send_ab\r") == 0)
-	  {
-		  UART_Transmit_string_CR_LF(&huart1, "resistance to degree a and b:", 10);
-		  UART_send_float(&huart1,RTD_a,10);
-		  UART_send_float(&huart1,RTD_b,10);
-		  strcpy(uart_string, "");
+//	  if(strcmp(uart_string, "calibr:send_ab\r") == 0)
+//	  {
+//		  UART_Transmit_string_CR_LF(&huart1, "resistance to degree a and b:", 10);
+//		  UART_send_float(&huart1,RTD_a,10);
+//		  UART_send_float(&huart1,RTD_b,10);
+//		  strcpy(uart_string, "");
+//
+//	  }
 
-	  }
-
-	  if(strcmp(uart_string, "start:calibration\r") == 0)
-	  {
-		  potentiometer_calibration();
-		  strcpy(uart_string, "");
-	  }
-
+	  /*! Hold camera position*/
 	  if(strcmp(uart_string, "tracking:start\r") == 0)
 	  {
-		  tick=get_microseconds_since_begin(startTick);
-		  a = stabilize_by_pid(&gst_pid, ONE_US*1000, tick);
+//		  tick=get_microseconds_since_begin(startTick);
+		  a = stabilize_by_pid(&gst_pid);
 		  UART_send_float(&huart1, a, 10);
 	  }
-
+	  /*! Stop hold camera position*/
 	  if(strcmp(uart_string, "tracking:stop\r") == 0)
 	  {
 		  strcpy(uart_string, "");
 	  }
 
+	  /*! Check if command recieved*/
 	  if(uart_buffer[uart_rx_counter-1] == '\r')
 	  {
 
 		  strcpy(uart_string, uart_buffer);
 		  uart_rx_counter=0;
-		  clear_uart_buffer(uart_rx_counter, 100, uart_buffer);
+		  clear_uart_buffer(100, uart_buffer);
 		  HAL_Delay(1);
 	  }
 
@@ -698,50 +698,51 @@ float complementary_filter(int axis, float* CFK,
 	return angle;
 }
 
-float stabilize_v1(float hold_angle, float prev_angle, float precision,
-		                             uint32_t time_step, uint32_t timer)
-{
-	  volatile float da;
-	  volatile float imu_angle;
-	  if((timer%time_step)!=0)
-	  {
-		  return prev_angle;
-	  }
-	  imu_angle = complementary_filter( Z_AXIS, &CFK, &gyro_angles);
+//float stabilize_v1(float hold_angle, float prev_angle, float precision,
+//		                             uint32_t time_step, uint32_t timer)
+//{
+//	  volatile float da;
+//	  volatile float imu_angle;
+//	  if((timer%time_step)!=0)
+//	  {
+//		  return prev_angle;
+//	  }
+//	  imu_angle = complementary_filter( Z_AXIS, &CFK, &gyro_angles);
+//
+//	  if(imu_angle < IMU_MAX_ANGLE)
+//	  {
+//		  imu_angle = IMU_MAX_ANGLE;
+//	  }
+//
+//	  if(imu_angle > IMU_MIN_ANGLE)
+//	  {
+//		  imu_angle = IMU_MIN_ANGLE;
+//	  }
+//
+//	  imu_angle = imu_angle*ITS_B + ITS_A;
+//	  da = fabs(prev_angle - imu_angle);
+//	  if(da < precision)
+//	  {
+//		  return imu_angle;
+//	  }
+//
+//	  servo_set_position(imu_angle);
+//      return _WMA_angle(10);
+////	  return set_angle(imu_angle, precision);
+//}
 
-	  if(imu_angle < IMU_MAX_ANGLE)
-	  {
-		  imu_angle = IMU_MAX_ANGLE;
-	  }
-
-	  if(imu_angle > IMU_MIN_ANGLE)
-	  {
-		  imu_angle = IMU_MIN_ANGLE;
-	  }
-
-	  imu_angle = imu_angle*ITS_B + ITS_A;
-	  da = fabs(prev_angle - imu_angle);
-	  if(da < precision)
-	  {
-		  return imu_angle;
-	  }
-
-	  servo_set_position(imu_angle);
-      return _WMA_angle(10);
-//	  return set_angle(imu_angle, precision);
-}
-
-float stabilize_by_pid(PIDtypedef *PID_struct,
-		               uint32_t time_step, uint32_t timer)
+//float stabilize_by_pid(PIDtypedef *PID_struct,
+//		               uint32_t time_step, uint32_t timer)
+float stabilize_by_pid(PIDtypedef *PID_struct)
 {
 	  volatile float pid_error;
 	  volatile float imu_angle;
 	  volatile float set;
-
-	  if((timer%time_step)!=0)
-	  {
-		  return PID_struct->out;
-	  }
+//
+//	  if((timer%time_step)!=0)
+//	  {
+//		  return PID_struct->out;
+//	  }
 	  imu_angle = complementary_filter(Z_AXIS, &CFK, &gyro_angles);
 
 	  if(imu_angle > IMU_MAX_ANGLE)

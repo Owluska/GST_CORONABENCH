@@ -7,10 +7,6 @@ gst_math.c:88:7:SMA_angle	16	static
 gst_math.c:100:7:last_ited_angle	16	static
 gst_math.c:110:7:WMA_angle	24	static
 gst_math.c:125:7:_WMA_angle	24	static
-gst_math.c:141:7:NSF_angle_2points	24	static
 gst_math.c:166:7:EMA_angle_2points	24	static
 gst_math.c:183:6:EMA_angle	24	static
-gst_math.c:199:7:_fabs	16	static
 gst_math.c:205:5:get_sign	8	static
-gst_math.c:224:7:clamp	24	static
-gst_math.c:262:7:SMA_acc	24	static

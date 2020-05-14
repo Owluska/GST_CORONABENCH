@@ -2,5 +2,5 @@ USB_comunication.c:16:6:clear_uart_buffer	8	static
 USB_comunication.c:23:6:UART_Transmit_number_CR_LF	32	static
 USB_comunication.c:37:6:UART_Transmit_string	24	static
 USB_comunication.c:51:6:UART_Transmit_string_CR_LF	24	static
-USB_comunication.c:70:6:UART_send_float	136	static
-USB_comunication.c:99:6:send_series_	144	static
+USB_comunication.c:63:6:UART_send_float	136	static
+USB_comunication.c:92:6:send_series_	144	static

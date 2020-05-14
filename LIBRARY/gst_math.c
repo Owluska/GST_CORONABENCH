@@ -138,28 +138,28 @@ float _WMA_angle(int steps)
 
 
 //float noise spike filter
-float NSF_angle_2points(float previous_value,float current_value,float delta)
-{
-
-	float angle;
-	if((current_value-current_value)== delta)
-	{
-		angle = current_value;
-	}
-
-	if((current_value-previous_value)> delta)
-	{
-		angle = previous_value + delta;
-	}
-
-	if((current_value-previous_value)< delta)
-//	if((previous_value-current_value)> delta)
-	{
-		angle = previous_value - delta;
-	}
-
-	return angle;
-}
+//float NSF_angle_2points(float previous_value,float current_value,float delta)
+//{
+//
+//	float angle;
+//	if((current_value-current_value)== delta)
+//	{
+//		angle = current_value;
+//	}
+//
+//	if((current_value-previous_value)> delta)
+//	{
+//		angle = previous_value + delta;
+//	}
+//
+//	if((current_value-previous_value)< delta)
+////	if((previous_value-current_value)> delta)
+//	{
+//		angle = previous_value - delta;
+//	}
+//
+//	return angle;
+//}
 
 
 
@@ -196,11 +196,11 @@ void EMA_angle(int steps, float delta, float arr[steps])
 	}
 }
 
-float _fabs(volatile float number)
-{
-	number = (number>= 0) ? number :-number;
-	return number;
-}
+//float _fabs(volatile float number)
+//{
+//	number = (number>= 0) ? number :-number;
+//	return number;
+//}
 
 int get_sign(float number)
 {
@@ -221,53 +221,6 @@ int get_sign(float number)
 
 }
 
-float clamp(float value, float min, float max)
-{
-//	volatile float result;
-//	if(value > max)
-//	{
-//		result = max;
-//	}
-//
-//	if(value<min)
-//	{
-//		result= min;
-//	}
-//
-//	if((value<=max) && (value>=min))
-//	{
-//		result = value;
-//	}
-//		return result;
-	volatile float result;
-	if(value > max)
-	{
-		result = max;
-	}
-
-	else if(value < min)
-	{
-		result = min;
-	}
-	else
-	{
-		result = value;
-	}
-
-	return result;
-}
 
 
-
-float SMA_acc(int steps, int axis)
-{
-	volatile float temp = 0.0;
-	for(int i=0; i<steps; i++)
-	{
-		temp+=IMU_get_acc(axis);
-//		HAL_Delay(10);
-	}
-	temp = temp/steps;
-	return temp;
-}
 
